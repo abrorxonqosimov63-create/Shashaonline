@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shashka Online</title>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <style>
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; touch-action: none; overflow: hidden; }
+        .board { 
+            width: 90vw; height: 90vw; max-width: 400px; max-height: 400px;
+            margin: 20px auto; display: grid; grid-template-columns: repeat(8, 1fr);
+            border: 5px solid #333; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        .cell { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
+        .black-cell { background: #4d4d4d; }
+        .white-cell { background: #d9d9d9; }
+        .piece { width: 80%; height: 80%; border-radius: 50%; cursor: pointer; transition: 0.2s; border: 2px solid #000; }
+        .red-p { background: #e74c3c; box-shadow: inset 0 0 10px #000; }
+        .white-p { background: #ecf0f1; box-shadow: inset 0 0 10px #7f8c8d; }
+        .selected { transform: scale(1.15); box-shadow: 0 0 15px yellow; z-index: 10; border: 3px solid yellow; }
+        #status { margin-top: 20px; font-size: 18px; color: #f1c40f; font-weight: bold; min-height: 24px; }
+    </style>
+</head>
+<body>
+    <div id="status">Baza ulanmoqda...</div>
+    <div class="board" id="board"></div>
+    <div style="margin-top: 10px;">
+        <button onclick="location.reload()" style="padding: 10px; border-radius: 5px; border: none; background: #3498db; color: white;">Yangilash 🔄</button>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBbpI3DjECRf1NClu_RCw5bMnjBkFP24Jo",
+            authDomain: "shashkionline-f0674.firebaseapp.com",
+            databaseURL: "https://shashkionline-f0674-default-rtdb.firebaseio.com",
+            projectId: "shashkionline-f0674",
+            storageBucket: "shashkionline-f0674.firebasestorage.app",
+            messagingSenderId: "237446280837",
+            appId: "1:237446280837:web:ccf349b48ddd2c3d555bec"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const boardDiv = document.getElementById('board');
+        const statusDiv = document.getElementById('status');
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = urlParams.get('game') || 'demo_room';
+
+        let gameState = { turn: 'red', pieces: {} };
+
+        // Bazadan ma'lumot olish
+        db.ref('games/' + gameId).on('value', (snap) => {
+            if (snap.exists()) {
+                gameState = snap.val();
+                statusDiv.innerText = gameState.turn === 'red' ? "Qizillarning yurishi" : "Oqlarning yurishi";
+            } else {
+                statusDiv.innerText = "Yangi o'yin kutilyapti...";
+                setupInitialPieces();
+            }
+            renderBoard();
+        });
+
+        function setupInitialPieces() {
+            const initial = {};
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    if((r+c)%2 !== 0) {
+                        if(r < 3) initial[`${r}-${c}`] = 'white';
+                        if(r > 4) initial[`${r}-${c}`] = 'red';
+                    }
+                }
+            }
+            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial });
+        }
+
+        function renderBoard() {
+            boardDiv.innerHTML = '';
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${(r+c)%2 === 0 ? 'white-cell' : 'black-cell'}`;
+                    
+                    const p = gameState.pieces && gameState.pieces[`${r}-${c}`];
+                    if (p) {
+                        const piece = document.createElement('div');
+                        piece.className = `piece ${p === 'red' ? 'red-p' : 'white-p'}`;
+                        cell.appendChild(piece);
+                    }
+                    boardDiv.appendChild(cell);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
