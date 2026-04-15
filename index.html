@@ -12,16 +12,16 @@
         .cell { aspect-ratio: 1/1; display: flex; justify-content: center; align-items: center; }
         .white-cell { background: #d7ccc8; }
         .black-cell { background: #4e342e; }
-        .piece { width: 80%; height: 80%; border-radius: 50%; cursor: pointer; position: relative; border: 2px solid rgba(0,0,0,0.3); }
+        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; border: 2px solid rgba(0,0,0,0.4); }
         .red-p { background: #d32f2f; box-shadow: 0 4px #b71c1c; }
         .white-p { background: #fbc02d; box-shadow: 0 4px #f9a825; }
-        .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; }
-        .selected { outline: 4px solid #4caf50; z-index: 10; }
-        #status { margin: 15px; font-size: 1.1rem; background: #333; padding: 10px 20px; border-radius: 20px; }
+        .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; }
+        .selected { outline: 5px solid #4caf50; z-index: 10; box-shadow: 0 0 15px #4caf50; }
+        #status { margin: 15px; font-size: 1.1rem; background: #333; padding: 10px 20px; border-radius: 20px; text-align: center; }
     </style>
 </head>
 <body>
-    <h3>Pro Shashka (Majburiy urish)</h3>
+    <h3>Pro Shashka Online</h3>
     <div id="status">Yuklanmoqda...</div>
     <div id="board"></div>
 
@@ -39,9 +39,9 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game') || 'pro_v3';
+        const gameId = urlParams.get('game') || 'pro_master_v1';
 
-        let gameState = { turn: 'red', pieces: {}, lastCapturer: null };
+        let gameState = { turn: 'red', pieces: {}, jumpOnly: null };
         let selectedCell = null;
 
         db.ref('games/' + gameId).on('value', (snap) => {
@@ -60,54 +60,43 @@
                     }
                 }
             }
-            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial, lastCapturer: null });
+            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial, jumpOnly: null });
         }
 
-        function getAllCaptures(color) {
-            const captures = [];
-            for (let pos in gameState.pieces) {
-                if (gameState.pieces[pos].color === color) {
-                    const [r, c] = pos.split('-').map(Number);
-                    const moves = getAvailableMoves(r, c);
-                    const pieceCaptures = moves.filter(m => m.captured);
-                    if (pieceCaptures.length > 0) captures.push({ pos, moves: pieceCaptures });
-                }
-            }
-            return captures;
-        }
-
-        function getAvailableMoves(r, c) {
+        function getMoves(r, c, forceJump = false) {
             const piece = gameState.pieces[`${r}-${c}`];
             const moves = [];
             const dirs = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
 
             dirs.forEach(([dr, dc]) => {
                 if (piece.type === 'normal') {
-                    // Oddiy yurish (faqat oldinga)
-                    const nr = r + dr, nc = c + dc;
-                    if (nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
-                        if ((piece.color === 'red' && dr < 0) || (piece.color === 'white' && dr > 0)) {
-                            moves.push({ r: nr, c: nc, captured: null });
+                    if (!forceJump) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
+                            if ((piece.color === 'red' && dr < 0) || (piece.color === 'white' && dr > 0)) {
+                                moves.push({ r: nr, c: nc, cap: null });
+                            }
                         }
                     }
-                    // Urib olish (har qanday tomonga)
                     const jr = r + dr*2, jc = c + dc*2;
                     if (jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`${jr}-${jc}`]) {
                         const mid = gameState.pieces[`${r+dr}-${c+dc}`];
-                        if (mid && mid.color !== piece.color) moves.push({ r: jr, c: jc, captured: `${r+dr}-${c+dc}` });
+                        if (mid && mid.color !== piece.color) moves.push({ r: jr, c: jc, cap: `${r+dr}-${c+dc}` });
                     }
                 } else {
-                    // Damka mantiqi
+                    let hasCap = false;
                     for (let i = 1; i < 8; i++) {
                         const nr = r + dr*i, nc = c + dc*i;
                         if (nr<0 || nr>=8 || nc<0 || nc>=8) break;
                         const p = gameState.pieces[`${nr}-${nc}`];
-                        if (!p) moves.push({ r: nr, c: nc, captured: null });
+                        if (!p) { if (!forceJump) moves.push({ r: nr, c: nc, cap: null }); }
                         else {
                             if (p.color !== piece.color) {
-                                const jr = nr + dr, jc = nc + dc;
-                                if (jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`${jr}-${jc}`]) {
-                                    moves.push({ r: jr, c: jc, captured: `${nr}-${nc}` });
+                                for(let j=1; j<8; j++) {
+                                    const jr = nr+dr*j, jc = nc+dc*j;
+                                    if(jr<0 || jr>=8 || jc<0 || jc>=8 || gameState.pieces[`${jr}-${jc}`]) break;
+                                    moves.push({ r: jr, c: jc, cap: `${nr}-${nc}` });
+                                    hasCap = true;
                                 }
                             }
                             break;
@@ -121,7 +110,9 @@
         function renderBoard() {
             const boardDiv = document.getElementById('board');
             boardDiv.innerHTML = '';
-            document.getElementById('status').innerText = (gameState.lastCapturer ? "Davom eting: " : "Navbat: ") + (gameState.turn === 'red' ? "Qizillar" : "Oqlar");
+            let statusText = gameState.turn === 'red' ? "Navbat: Qizillar" : "Navbat: Oqlar";
+            if (gameState.jumpOnly) statusText += " (Urishni davom eting!)";
+            document.getElementById('status').innerText = statusText;
 
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
@@ -135,18 +126,18 @@
                         if (selectedCell === pos) pDiv.classList.add('selected');
                         cell.appendChild(pDiv);
                     }
-                    cell.onclick = () => handleMove(r, c);
+                    cell.onclick = () => handleClick(r, c);
                     boardDiv.appendChild(cell);
                 }
             }
         }
 
-        function handleMove(r, c) {
+        function handleClick(r, c) {
             const pos = `${r}-${c}`;
             const piece = gameState.pieces[pos];
 
             if (piece && piece.color === gameState.turn) {
-                if (gameState.lastCapturer && gameState.lastCapturer !== pos) return;
+                if (gameState.jumpOnly && gameState.jumpOnly !== pos) return;
                 selectedCell = pos;
                 renderBoard();
                 return;
@@ -154,43 +145,45 @@
 
             if (selectedCell && !piece) {
                 const [sr, sc] = selectedCell.split('-').map(Number);
-                const available = getAvailableMoves(sr, sc);
-                const move = available.find(m => m.r === r && m.c === c);
-                
+                const allMoves = getMoves(sr, sc, !!gameState.jumpOnly);
+                const move = allMoves.find(m => m.r === r && m.c === c);
+
+                if (!move) return;
+
                 // Majburiy urish tekshiruvi
-                const allCaptures = getAllCaptures(gameState.turn);
-                if (allCaptures.length > 0 && (!move || !move.captured)) {
+                const canAnyJump = Object.keys(gameState.pieces).some(p => 
+                    gameState.pieces[p].color === gameState.turn && getMoves(...p.split('-').map(Number), false).some(m => m.cap)
+                );
+
+                if (canAnyJump && !move.cap) {
                     alert("Urib olish majburiy!");
                     return;
                 }
 
-                if (move) {
-                    let newPieces = {...gameState.pieces};
-                    let newType = gameState.pieces[selectedCell].type;
-                    if ((gameState.pieces[selectedCell].color === 'red' && r === 0) || (gameState.pieces[selectedCell].color === 'white' && r === 7)) newType = 'damka';
+                let newPieces = {...gameState.pieces};
+                let pData = newPieces[selectedCell];
+                if ((pData.color === 'red' && r === 0) || (pData.color === 'white' && r === 7)) pData.type = 'damka';
 
-                    newPieces[pos] = { color: gameState.turn, type: newType };
-                    delete newPieces[selectedCell];
-                    if (move.captured) delete newPieces[move.captured];
+                newPieces[pos] = pData;
+                delete newPieces[selectedCell];
+                if (move.cap) delete newPieces[move.cap];
 
-                    // Yana urish mumkinmi?
-                    let nextTurn = gameState.turn === 'red' ? 'white' : 'red';
-                    let nextCapturer = null;
-                    if (move.captured) {
-                        const nextMoves = getAvailableMoves(r, c).filter(m => m.captured);
-                        if (nextMoves.length > 0) {
-                            nextTurn = gameState.turn;
-                            nextCapturer = pos;
-                        }
+                let nextTurn = gameState.turn;
+                let nextJumpOnly = null;
+
+                if (move.cap) {
+                    const extraJumps = getMoves(r, c, true).filter(m => m.cap);
+                    if (extraJumps.length > 0) {
+                        nextJumpOnly = pos;
+                    } else {
+                        nextTurn = gameState.turn === 'red' ? 'white' : 'red';
                     }
-
-                    db.ref('games/' + gameId).update({
-                        pieces: newPieces,
-                        turn: nextTurn,
-                        lastCapturer: nextCapturer
-                    });
-                    selectedCell = null;
+                } else {
+                    nextTurn = gameState.turn === 'red' ? 'white' : 'red';
                 }
+
+                db.ref('games/' + gameId).update({ pieces: newPieces, turn: nextTurn, jumpOnly: nextJumpOnly });
+                selectedCell = null;
             }
         }
     </script>
