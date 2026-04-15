@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Shashka Online v5</title>
+    <title>Pro Shashka AI</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
@@ -17,14 +17,18 @@
         .white-p { background: #fbc02d; box-shadow: 0 4px #f9a825; }
         .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; }
         .selected { outline: 4px solid #4caf50; box-shadow: 0 0 15px #4caf50; }
-        /* Yurish mumkin bo'lgan kataklar uchun yashil nuqta */
         .possible-move::after { content: ''; width: 15px; height: 15px; background: rgba(76, 175, 80, 0.7); border-radius: 50%; position: absolute; z-index: 1; }
         #status { margin: 15px; font-size: 1.1rem; background: #333; padding: 12px 25px; border-radius: 25px; border: 1px solid #4caf50; text-align: center; }
+        button { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-    <h3>Pro Shashka (Yordamchi bilan)</h3>
-    <div id="status">Yuklanmoqda...</div>
+    <h3>Pro Shashka AI v1</h3>
+    <div id="status">Rejimni tanlang</div>
+    <div style="display: flex; gap: 10px;">
+        <button onclick="setMode('pvp')">Do'st bilan</button>
+        <button onclick="setMode('pve')">Bot bilan</button>
+    </div>
     <div id="board"></div>
 
     <script>
@@ -41,17 +45,23 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game') || 'pro_master_v5';
+        const gameId = urlParams.get('game') || 'ai_room_99';
 
-        let gameState = { turn: 'red', pieces: {}, jumpOnly: null };
+        let gameState = { turn: 'red', pieces: {}, jumpOnly: null, mode: 'pvp' };
         let selectedCell = null;
         let possibleMoves = [];
 
         db.ref('games/' + gameId).on('value', (snap) => {
-            if (snap.exists()) { gameState = snap.val(); } 
-            else { resetGame(); }
-            renderBoard();
+            if (snap.exists()) { 
+                gameState = snap.val(); 
+                renderBoard();
+                if (gameState.mode === 'pve' && gameState.turn === 'white') {
+                    setTimeout(botMove, 800);
+                }
+            } else { resetGame(); }
         });
+
+        function setMode(m) { db.ref('games/' + gameId).update({ mode: m }); }
 
         function resetGame() {
             const initial = {};
@@ -63,11 +73,12 @@
                     }
                 }
             }
-            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial, jumpOnly: null });
+            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial, jumpOnly: null, mode: 'pvp' });
         }
 
-        function getMoves(r, c, forceJump = false) {
-            const piece = gameState.pieces[`${r}-${c}`];
+        function getMoves(r, c, forceJump = false, customPieces = null) {
+            const pieces = customPieces || gameState.pieces;
+            const piece = pieces[`${r}-${c}`];
             if (!piece) return [];
             const moves = [];
             const dirs = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -76,29 +87,27 @@
                 if (piece.type === 'normal') {
                     if (!forceJump) {
                         const nr = r + dr, nc = c + dc;
-                        if (nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
+                        if (nr>=0 && nr<8 && nc>=0 && nc<8 && !pieces[`${nr}-${nc}`]) {
                             if ((piece.color === 'red' && dr < 0) || (piece.color === 'white' && dr > 0)) {
                                 moves.push({ r: nr, c: nc, cap: null });
                             }
                         }
                     }
                     const jr = r + dr*2, jc = c + dc*2;
-                    if (jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`jr-jc`]) {
-                        const mid = gameState.pieces[`${r+dr}-${c+dc}`];
-                        if (mid && mid.color !== piece.color && !gameState.pieces[`${jr}-${jc}`]) {
-                            moves.push({ r: jr, c: jc, cap: `${r+dr}-${c+dc}` });
-                        }
+                    if (jr>=0 && jr<8 && jc>=0 && jc<8 && !pieces[`${jr}-${jc}`]) {
+                        const mid = pieces[`${r+dr}-${c+dc}`];
+                        if (mid && mid.color !== piece.color) moves.push({ r: jr, c: jc, cap: `${r+dr}-${c+dc}` });
                     }
                 } else {
                     for (let i = 1; i < 8; i++) {
                         const nr = r + dr*i, nc = c + dc*i;
                         if (nr<0 || nr>=8 || nc<0 || nc>=8) break;
-                        const p = gameState.pieces[`${nr}-${nc}`];
+                        const p = pieces[`${nr}-${nc}`];
                         if (!p) { if (!forceJump) moves.push({ r: nr, c: nc, cap: null }); }
                         else {
                             if (p.color !== piece.color) {
                                 const jr = nr + dr, jc = nc + dc;
-                                if (jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`${jr}-${jc}`]) {
+                                if (jr>=0 && jr<8 && jc>=0 && jc<8 && !pieces[`${jr}-${jc}`]) {
                                     moves.push({ r: jr, c: jc, cap: `${nr}-${nc}` });
                                 }
                             }
@@ -110,32 +119,74 @@
             return moves;
         }
 
+        function botMove() {
+            if (gameState.turn !== 'white') return;
+            let allBotPieces = Object.keys(gameState.pieces).filter(p => gameState.pieces[p].color === 'white');
+            let captureMoves = [];
+            let normalMoves = [];
+
+            allBotPieces.forEach(pos => {
+                const [r, c] = pos.split('-').map(Number);
+                const moves = getMoves(r, c, !!gameState.jumpOnly);
+                moves.forEach(m => {
+                    if (m.cap) captureMoves.push({ from: pos, to: m });
+                    else normalMoves.push({ from: pos, to: m });
+                });
+            });
+
+            const finalMove = captureMoves.length > 0 ? captureMoves[Math.floor(Math.random() * captureMoves.length)] :
+                              normalMoves[Math.floor(Math.random() * normalMoves.length)];
+
+            if (finalMove) executeMove(finalMove.from, finalMove.to);
+        }
+
+        function executeMove(from, to) {
+            const [sr, sc] = from.split('-').map(Number);
+            let newPieces = {...gameState.pieces};
+            let pData = {...newPieces[from]};
+            if ((pData.color === 'red' && to.r === 0) || (pData.color === 'white' && to.r === 7)) pData.type = 'damka';
+
+            newPieces[`${to.r}-${to.c}`] = pData;
+            delete newPieces[from];
+            if (to.cap) delete newPieces[to.cap];
+
+            let nextJumpOnly = null;
+            let nextTurn = gameState.turn === 'red' ? 'white' : 'red';
+
+            if (to.cap) {
+                const extra = getMoves(to.r, to.c, true, newPieces).filter(m => m.cap);
+                if (extra.length > 0) {
+                    nextJumpOnly = `${to.r}-${to.c}`;
+                    nextTurn = gameState.turn;
+                }
+            }
+
+            db.ref('games/' + gameId).update({ pieces: newPieces, turn: nextTurn, jumpOnly: nextJumpOnly });
+        }
+
         function renderBoard() {
             const boardDiv = document.getElementById('board');
             boardDiv.innerHTML = '';
-            let statusText = gameState.turn === 'red' ? "Navbat: Qizillar" : "Navbat: Oqlar";
-            if (gameState.jumpOnly) statusText = "Urishni davom ettiring!";
-            document.getElementById('status').innerText = statusText;
+            document.getElementById('status').innerText = gameState.turn === 'red' ? "Navbat: Siz (Qizil)" : "Navbat: Bot (Oq)";
 
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const cell = document.createElement('div');
                     const pos = `${r}-${c}`;
                     cell.className = `cell ${(r+c)%2 === 0 ? 'white-cell' : 'black-cell'}`;
-                    
-                    // Yurish mumkin bo'lgan joylarni belgilash
-                    if (possibleMoves.some(m => m.r === r && m.c === c)) {
-                        cell.classList.add('possible-move');
-                    }
+                    if (possibleMoves.some(m => m.r === r && m.c === c)) cell.classList.add('possible-move');
 
                     const p = gameState.pieces[pos];
                     if (p) {
                         const pDiv = document.createElement('div');
                         pDiv.className = `piece ${p.color}-p ${p.type === 'damka' ? 'damka' : ''}`;
-                        if (selectedCell === pos || gameState.jumpOnly === pos) pDiv.classList.add('selected');
+                        if (selectedCell === pos) pDiv.classList.add('selected');
                         cell.appendChild(pDiv);
                     }
-                    cell.onclick = () => handleClick(r, c);
+                    cell.onclick = () => {
+                        if (gameState.mode === 'pve' && gameState.turn === 'white') return;
+                        handleClick(r, c);
+                    };
                     boardDiv.appendChild(cell);
                 }
             }
@@ -145,60 +196,22 @@
             const pos = `${r}-${c}`;
             const piece = gameState.pieces[pos];
 
-            // Dona tanlanganda yurishlarni hisoblash
             if (piece && piece.color === gameState.turn) {
                 if (gameState.jumpOnly && gameState.jumpOnly !== pos) return;
                 selectedCell = pos;
-                
-                // Majburiy urish qoidasini hisobga olgan holda yurishlarni ko'rsatish
                 const canAnyJump = Object.keys(gameState.pieces).some(p => 
                     gameState.pieces[p].color === gameState.turn && getMoves(...p.split('-').map(Number), false).some(m => m.cap)
                 );
-                
                 let moves = getMoves(r, c, !!gameState.jumpOnly);
-                if (canAnyJump) {
-                    moves = moves.filter(m => m.cap);
-                }
-                possibleMoves = moves;
-                
+                possibleMoves = canAnyJump ? moves.filter(m => m.cap) : moves;
                 renderBoard();
-                return;
-            }
-
-            if (selectedCell && !piece) {
-                const [sr, sc] = selectedCell.split('-').map(Number);
+            } else if (selectedCell && !piece) {
                 const move = possibleMoves.find(m => m.r === r && m.c === c);
-
-                if (!move) {
+                if (move) {
+                    executeMove(selectedCell, move);
                     selectedCell = null;
                     possibleMoves = [];
-                    renderBoard();
-                    return;
                 }
-
-                let newPieces = {...gameState.pieces};
-                let pData = {...newPieces[selectedCell]};
-                if ((pData.color === 'red' && r === 0) || (pData.color === 'white' && r === 7)) pData.type = 'damka';
-
-                newPieces[pos] = pData;
-                delete newPieces[selectedCell];
-                if (move.cap) delete newPieces[move.cap];
-
-                let nextJumpOnly = null;
-                let nextTurn = gameState.turn === 'red' ? 'white' : 'red';
-
-                if (move.cap) {
-                    gameState.pieces = newPieces; 
-                    const extraJumps = getMoves(r, c, true).filter(m => m.cap);
-                    if (extraJumps.length > 0) {
-                        nextJumpOnly = pos;
-                        nextTurn = gameState.turn;
-                    }
-                }
-
-                possibleMoves = [];
-                db.ref('games/' + gameId).update({ pieces: newPieces, turn: nextTurn, jumpOnly: nextJumpOnly });
-                selectedCell = null;
             }
         }
     </script>
