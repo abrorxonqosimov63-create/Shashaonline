@@ -1,56 +1,138 @@
-<script>
-    // ... FirebaseConfig tepada o'zgarmaydi ...
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shashka Online Professional</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        body { display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; font-family: sans-serif; margin: 0; padding: 20px; }
+        #board { display: grid; grid-template-columns: repeat(8, 45px); grid-template-rows: repeat(8, 45px); border: 5px solid #34495e; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .cell { width: 45px; height: 45px; display: flex; justify-content: center; align-items: center; }
+        .white-cell { background: #ecf0f1; }
+        .black-cell { background: #2c3e50; }
+        .piece { width: 35px; height: 35px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0,0,0,0.2); transition: 0.2s; }
+        .red-p { background: #e74c3c; box-shadow: 0 4px #c0392b; }
+        .white-p { background: #f1c40f; box-shadow: 0 4px #f39c12; }
+        .selected { background: #2ecc71 !important; border-radius: 5px; }
+        #status { margin: 15px; font-size: 1.2rem; font-weight: bold; background: #34495e; padding: 10px 20px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Shashka Online</h2>
+    <div id="status">Yuklanmoqda...</div>
+    <div id="board"></div>
 
-    function handleCellClick(r, c) {
-        const pos = `${r}-${c}`;
-        const piece = gameState.pieces[pos];
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBbpI3DjECRf1NClu_RCw5bMnjBkFP24Jo",
+            authDomain: "shashkionline-f0674.firebaseapp.com",
+            databaseURL: "https://shashkionline-f0674-default-rtdb.firebaseio.com",
+            projectId: "shashkionline-f0674",
+            storageBucket: "shashkionline-f0674.firebasestorage.app",
+            messagingSenderId: "237446280837",
+            appId: "1:237446280837:web:ccf349b48ddd2c3d555bec"
+        };
 
-        // 1. O'z donasini tanlash
-        if (piece && piece === gameState.turn) {
-            selectedCell = pos;
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const boardDiv = document.getElementById('board');
+        const statusDiv = document.getElementById('status');
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = urlParams.get('game') || 'demo_room';
+
+        let gameState = { turn: 'red', pieces: {} };
+        let selectedCell = null;
+
+        db.ref('games/' + gameId).on('value', (snap) => {
+            if (snap.exists()) { gameState = snap.val(); } 
+            else { setupInitialPieces(); }
             renderBoard();
-            return;
-        }
+        });
 
-        if (selectedCell && !piece && (r+c)%2 !== 0) {
-            const [sr, sc] = selectedCell.split('-').map(Number);
-            const rowDiff = r - sr;
-            const colDiff = Math.abs(c - sc);
-            
-            let isCapture = false;
-            let capturedPos = null;
-
-            // 2. Urib olish (Majburiy mantiq asosi)
-            if (Math.abs(rowDiff) === 2 && colDiff === 2) {
-                const midR = (r + sr) / 2;
-                const midC = (c + sc) / 2;
-                const midPos = `${midR}-${midC}`;
-                const midPiece = gameState.pieces[midPos];
-
-                if (midPiece && midPiece !== gameState.turn) {
-                    isCapture = true;
-                    capturedPos = midPos;
+        function setupInitialPieces() {
+            const initial = {};
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    if((r+c)%2 !== 0) {
+                        if(r < 3) initial[`${r}-${c}`] = 'white';
+                        if(r > 4) initial[`${r}-${c}`] = 'red';
+                    }
                 }
             }
+            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial });
+        }
 
-            // 3. Oddiy yurish (faqat oldinga va faqat urib olmasa)
-            const isNormalMove = (gameState.turn === 'red' ? rowDiff === -1 : rowDiff === 1) && colDiff === 1;
+        function renderBoard() {
+            boardDiv.innerHTML = '';
+            statusDiv.innerText = gameState.turn === 'red' ? "Navbat: Qizillar" : "Navbat: Oqlar";
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${(r+c)%2 === 0 ? 'white-cell' : 'black-cell'}`;
+                    const pos = `${r}-${c}`;
+                    if (selectedCell === pos) cell.classList.add('selected');
+                    const p = gameState.pieces[pos];
+                    if (p) {
+                        const piece = document.createElement('div');
+                        piece.className = `piece ${p === 'red' ? 'red-p' : 'white-p'}`;
+                        cell.appendChild(piece);
+                    }
+                    cell.onclick = () => handleCellClick(r, c);
+                    boardDiv.appendChild(cell);
+                }
+            }
+        }
 
-            if (isCapture || isNormalMove) {
-                const newPieces = {...gameState.pieces};
-                newPieces[pos] = gameState.turn;
-                delete newPieces[selectedCell];
+        function handleCellClick(r, c) {
+            const pos = `${r}-${c}`;
+            const piece = gameState.pieces[pos];
+
+            if (piece && piece === gameState.turn) {
+                selectedCell = pos;
+                renderBoard();
+                return;
+            }
+
+            if (selectedCell && !piece && (r+c)%2 !== 0) {
+                const [sr, sc] = selectedCell.split('-').map(Number);
+                const rowDiff = r - sr;
+                const colDiff = Math.abs(c - sc);
                 
-                if (isCapture) {
-                    delete newPieces[capturedPos];
+                let isCapture = false;
+                let capturedPos = null;
+
+                // Urib olish mantiqi (2 qadam diagonal)
+                if (Math.abs(rowDiff) === 2 && colDiff === 2) {
+                    const midR = (r + sr) / 2;
+                    const midC = (c + sc) / 2;
+                    const midPos = `${midR}-${midC}`;
+                    const midPiece = gameState.pieces[midPos];
+                    if (midPiece && midPiece !== gameState.turn) {
+                        isCapture = true;
+                        capturedPos = midPos;
+                    }
                 }
 
-                db.ref('games/' + gameId).update({
-                    pieces: newPieces,
-                    turn: gameState.turn === 'red' ? 'white' : 'red'
-                });
-                selectedCell = null;
+                // Oddiy yurish (faqat oldinga va faqat 1 qadam)
+                const isNormalMove = (gameState.turn === 'red' ? rowDiff === -1 : rowDiff === 1) && colDiff === 1;
+
+                if (isCapture || isNormalMove) {
+                    const newPieces = {...gameState.pieces};
+                    newPieces[pos] = gameState.turn;
+                    delete newPieces[selectedCell];
+                    if (isCapture) delete newPieces[capturedPos];
+
+                    db.ref('games/' + gameId).update({
+                        pieces: newPieces,
+                        turn: gameState.turn === 'red' ? 'white' : 'red'
+                    });
+                    selectedCell = null;
+                }
             }
         }
-    }
-</script>
+    </script>
+</body>
+</html>
