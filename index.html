@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Shashka Online Fix</title>
+    <title>Shashka Online Multi-Hit</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
@@ -11,19 +11,21 @@
         body { display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; font-family: sans-serif; margin: 0; padding: 5px; }
         .header { display: flex; justify-content: space-between; width: 95vw; max-width: 400px; margin: 10px 0; }
         .p-card { background: #2c2c2c; padding: 10px; border-radius: 10px; border: 2px solid #444; flex: 1; text-align: center; margin: 0 5px; }
-        .p-card.active { border-color: #ffeb3b; }
+        .p-card.active { border-color: #ffeb3b; box-shadow: 0 0 10px #ffeb3b; }
         #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 5px solid #3e2723; background: #3e2723; }
         .cell { aspect-ratio: 1/1; display: flex; justify-content: center; align-items: center; position: relative; }
         .white-cell { background: #d7ccc8; }
         .black-cell { background: #4e342e; }
-        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; border: 1px solid rgba(0,0,0,0.3); }
+        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; border: 1px solid rgba(0,0,0,0.3); transition: 0.2s; }
         .red-p { background: #d32f2f; box-shadow: 0 4px #8a1c1c; }
         .white-p { background: #fbc02d; box-shadow: 0 4px #c49000; }
         .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; }
-        .selected { outline: 4px solid #4caf50; }
-        .possible-move::after { content: ''; width: 14px; height: 14px; background: rgba(76, 175, 80, 0.7); border-radius: 50%; position: absolute; }
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 95vw; max-width: 400px; margin-top: 15px; }
-        button { padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        .selected { outline: 4px solid #4caf50; transform: scale(1.1); z-index: 10; }
+        .possible-move::after { content: ''; width: 16px; height: 16px; background: rgba(76, 175, 80, 0.8); border-radius: 50%; position: absolute; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 95vw; max-width: 400px; margin-top: 15px; }
+        button { padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; background: #444; color: white; }
+        .btn-red { background: #d32f2f; }
+        .btn-green { background: #388e3c; }
     </style>
 </head>
 <body>
@@ -33,9 +35,9 @@
     </div>
     <div id="board"></div>
     <div class="controls">
-        <button onclick="handleAction('draw')" style="background: #4caf50; color: white;">🤝 Durang</button>
-        <button onclick="handleAction('surrender')" style="background: #f44336; color: white;">🏳️ Taslim</button>
-        <button onclick="resetGame()" style="grid-column: span 2; background: #555; color: white;">♻️ Yangi o'yin boshlash</button>
+        <button onclick="handleAction('draw')" class="btn-green">🤝 Durang</button>
+        <button onclick="handleAction('surrender')" class="btn-red">🏳️ Taslim</button>
+        <button onclick="resetGame()" style="grid-column: span 2;">♻️ Yangi o'yin boshlash</button>
     </div>
 
     <script>
@@ -51,10 +53,10 @@
             messagingSenderId: "237446280837",
             appId: "1:237446280837:web:ccf349b48ddd2c3d555bec"
         };
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game') || 'room_final';
+        const gameId = urlParams.get('game') || 'room_v2';
 
         let gameState = null;
         let selectedCell = null;
@@ -76,16 +78,17 @@
                     }
                 }
             }
-            db.ref('games/' + gameId).set({ turn: 'red', pieces, redTime: 30, whiteTime: 30, status: 'playing' });
+            db.ref('games/' + gameId).set({ turn: 'red', pieces, redTime: 30, whiteTime: 30, status: 'playing', jumpOnly: null });
         }
 
-        function getMoves(r, c) {
+        function getMoves(r, c, forceJump = false) {
             const piece = gameState.pieces[`${r}-${c}`];
+            if (!piece) return [];
             const moves = [];
             const dirs = [[1,1], [1,-1], [-1,1], [-1,-1]];
 
             dirs.forEach(([dr, dc]) => {
-                // 1. URIShNI TEKShIRISh (Hamma uchun)
+                // URIShNI TEKShIRISh
                 const jr = r + dr*2, jc = c + dc*2;
                 const mid = `${r+dr}-${c+dc}`;
                 if (jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`${jr}-${jc}`]) {
@@ -93,86 +96,36 @@
                         moves.push({ r: jr, c: jc, cap: mid });
                     }
                 }
-                // 2. ODDIY YuRISh
-                const nr = r + dr, nc = c + dc;
-                if (nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
-                    if (piece.type === 'damka') moves.push({ r: nr, c: nc, cap: null });
-                    else if (piece.color === 'red' && dr < 0) moves.push({ r: nr, c: nc, cap: null });
-                    else if (piece.color === 'white' && dr > 0) moves.push({ r: nr, c: nc, cap: null });
+                // ODDIY YuRISh
+                if (!forceJump) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
+                        if (piece.type === 'damka') moves.push({ r: nr, c: nc, cap: null });
+                        else if (piece.color === 'red' && dr < 0) moves.push({ r: nr, c: nc, cap: null });
+                        else if (piece.color === 'white' && dr > 0) moves.push({ r: nr, c: nc, cap: null });
+                    }
                 }
             });
             return moves;
         }
 
         function handleClick(r, c) {
-            if (!gameState) return;
+            if (!gameState || gameState.status !== 'playing') return;
             const pos = `${r}-${c}`;
-            if (gameState.pieces[pos] && gameState.pieces[pos].color === gameState.turn) {
+            const p = gameState.pieces[pos];
+
+            if (p && p.color === gameState.turn) {
+                // Agar zanjirli urish bo'lsa, faqat o'sha toshni tanlash mumkin
+                if (gameState.jumpOnly && gameState.jumpOnly !== pos) return;
+                
                 selectedCell = pos;
-                possibleMoves = getMoves(r, c);
+                const mvs = getMoves(r, c, false);
+                const jumps = mvs.filter(m => m.cap);
+                // Agar urish imkoni bo'lsa, faqat urishni ko'rsatadi
+                possibleMoves = jumps.length > 0 ? jumps : mvs;
                 renderBoard();
             } else if (selectedCell) {
                 const move = possibleMoves.find(m => m.r === r && m.c === c);
                 if (move) {
-                    let pData = {...gameState.pieces[selectedCell]};
-                    if ((pData.color === 'red' && r === 0) || (pData.color === 'white' && r === 7)) pData.type = 'damka';
-                    
-                    let updates = {};
-                    updates[`/pieces/${r}-${c}`] = pData;
-                    updates[`/pieces/${selectedCell}`] = null;
-                    if (move.cap) updates[`/pieces/${move.cap}`] = null;
-                    
-                    updates['/turn'] = gameState.turn === 'red' ? 'white' : 'red';
-                    updates['/redTime'] = 30;
-                    updates['/whiteTime'] = 30;
-
-                    db.ref('games/' + gameId).update(updates);
-                    selectedCell = null; possibleMoves = [];
-                }
-            }
-        }
-
-        function handleAction(type) {
-            if (type === 'surrender') {
-                alert("O'yin tugadi!"); resetGame();
-            } else {
-                alert("Taklif yuborildi");
-            }
-        }
-
-        function renderBoard() {
-            const b = document.getElementById('board'); b.innerHTML = '';
-            for (let r=0; r<8; r++) {
-                for (let c=0; c<8; c++) {
-                    const cell = document.createElement('div');
-                    cell.className = `cell ${(r+c)%2===0 ? 'white-cell' : 'black-cell'}`;
-                    if (possibleMoves.some(m => m.r === r && m.c === c)) cell.classList.add('possible-move');
-                    const p = gameState.pieces && gameState.pieces[`${r}-${c}`];
-                    if (p) {
-                        const d = document.createElement('div');
-                        d.className = `piece ${p.color}-p ${p.type==='damka'?'damka':''}`;
-                        if (selectedCell === `${r}-${c}`) d.classList.add('selected');
-                        cell.appendChild(d);
-                    }
-                    cell.onclick = () => handleClick(r, c);
-                    b.appendChild(cell);
-                }
-            }
-        }
-
-        function updateUI() {
-            document.getElementById('timer-red').innerText = `00:${gameState.redTime}`;
-            document.getElementById('timer-white').innerText = `00:${gameState.whiteTime}`;
-            document.getElementById('card-red').classList.toggle('active', gameState.turn === 'red');
-            document.getElementById('card-white').classList.toggle('active', gameState.turn === 'white');
-        }
-
-        setInterval(() => {
-            if (gameState) {
-                let k = gameState.turn === 'red' ? 'redTime' : 'whiteTime';
-                if (gameState[k] > 0) db.ref(`games/${gameId}/${k}`).set(gameState[k] - 1);
-            }
-        }, 1000);
-    </script>
-</body>
-</html>
+                    let newPieces = JSON.parse(JSON.stringify(gameState.pieces));
+                    let pData = newPieces[selected
