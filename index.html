@@ -3,29 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Shashka v8</title>
+    <title>Pro Shashka Online v10</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { display: flex; flex-direction: column; align-items: center; background: #121212; color: white; font-family: sans-serif; margin: 0; padding: 10px; }
+        body { display: flex; flex-direction: column; align-items: center; background: #121212; color: white; font-family: sans-serif; margin: 0; padding: 10px; overflow: hidden; }
         .profiles { display: flex; justify-content: space-between; width: 95vw; max-width: 400px; margin-bottom: 10px; }
-        .p-card { background: #1e1e1e; padding: 8px; border-radius: 10px; border: 1px solid #4caf50; flex: 1; text-align: center; }
-        .p-card.active { border: 2px solid #ffeb3b; box-shadow: 0 0 10px #ffeb3b; }
-        .p-name { font-size: 12px; font-weight: bold; color: #4caf50; }
-        .p-timer { font-size: 18px; font-family: monospace; color: #ffeb3b; }
-        #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 5px solid #3e2723; }
+        .p-card { background: #1e1e1e; padding: 10px; border-radius: 12px; border: 1px solid #4caf50; flex: 1; text-align: center; }
+        .p-card.active { border: 2px solid #ffeb3b; box-shadow: 0 0 15px rgba(255, 235, 59, 0.5); }
+        .p-name { font-size: 13px; font-weight: bold; color: #4caf50; margin-bottom: 5px; }
+        .p-timer { font-family: monospace; font-size: 20px; color: #ffeb3b; }
+        #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 6px solid #3e2723; background: #3e2723; }
         .cell { aspect-ratio: 1/1; display: flex; justify-content: center; align-items: center; position: relative; }
         .white-cell { background: #d7ccc8; }
         .black-cell { background: #4e342e; }
-        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; z-index: 2; }
+        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; z-index: 2; border: 2px solid rgba(0,0,0,0.3); }
         .red-p { background: #d32f2f; box-shadow: 0 4px #b71c1c; }
         .white-p { background: #fbc02d; box-shadow: 0 4px #f9a825; }
-        .damka::after { content: '👑'; font-size: 20px; position: absolute; top: 15%; }
-        .selected { outline: 3px solid #4caf50; transform: scale(1.05); }
-        .possible-move::after { content: ''; width: 12px; height: 12px; background: rgba(76, 175, 80, 0.7); border-radius: 50%; position: absolute; }
-        .controls { display: flex; gap: 5px; margin-bottom: 10px; }
-        button { background: #4caf50; color: white; border: none; padding: 8px; border-radius: 5px; font-size: 11px; }
+        .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; }
+        .selected { outline: 4px solid #4caf50; transform: scale(1.05); }
+        .possible-move::after { content: ''; width: 14px; height: 14px; background: rgba(76, 175, 80, 0.8); border-radius: 50%; position: absolute; }
+        .controls { display: flex; gap: 8px; margin-bottom: 10px; }
+        button { background: #4caf50; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -48,7 +48,7 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        
+
         const firebaseConfig = {
             apiKey: "AIzaSyBbpI3DjECRf1NClu_RCw5bMnjBkFP24Jo",
             authDomain: "shashkionline-f0674.firebaseapp.com",
@@ -61,10 +61,9 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game') || 'room_' + tg.initDataUnsafe.user?.id;
-        const myRating = 1100; // Bu yerda botdan kelgan reyting bo'lishi kerak
+        const gameId = urlParams.get('game') || 'room_' + (tg.initDataUnsafe.user?.id || 'guest');
 
-        let gameState = { turn: 'red', pieces: {}, redTime: 30, whiteTime: 30, status: 'playing' };
+        let gameState = { turn: 'red', pieces: {}, redTime: 30, whiteTime: 30, status: 'playing', jumpOnly: null };
         let selectedCell = null;
         let possibleMoves = [];
 
@@ -77,17 +76,117 @@
         });
 
         function resetGame() {
-            const pieces = {};
-            for(let r=0; r<8; r++){
-                for(let c=0; c<8; c++){
-                    if((r+c)%2 !== 0){
-                        if(r < 3) pieces[`${r}-${c}`] = { color: 'white', type: 'normal' };
-                        if(r > 4) pieces[`${r}-${c}`] = { color: 'red', type: 'normal' };
+            const initial = {};
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    if((r+c)%2 !== 0) {
+                        if(r < 3) initial[`${r}-${c}`] = { color: 'white', type: 'normal' };
+                        if(r > 4) initial[`${r}-${c}`] = { color: 'red', type: 'normal' };
                     }
                 }
             }
-            const startTime = myRating >= 1200 ? 180 : 30;
-            db.ref('games/' + gameId).set({ turn: 'red', pieces, redTime: startTime, whiteTime: startTime, status: 'playing' });
+            db.ref('games/' + gameId).set({ turn: 'red', pieces: initial, redTime: 30, whiteTime: 30, status: 'playing', jumpOnly: null });
+        }
+
+        function getPieceMoves(r, c, forceJump = false, customPieces = null) {
+            const pieces = customPieces || gameState.pieces;
+            const piece = pieces[`${r}-${c}`];
+            const moves = [];
+            const dirs = [[1,1], [1,-1], [-1,1], [-1,-1]];
+
+            dirs.forEach(([dr, dc]) => {
+                // Urib olish mantiqi
+                const jr = r + dr*2, jc = c + dc*2;
+                if(jr>=0 && jr<8 && jc>=0 && jc<8 && !pieces[`${jr}-${jc}`]) {
+                    const midPos = `${r+dr}-${c+dc}`;
+                    const midPiece = pieces[midPos];
+                    if(midPiece && midPiece.color !== piece.color) {
+                        moves.push({ r: jr, c: jc, cap: midPos });
+                    }
+                }
+                // Oddiy yurish (faqat urish majburiyati bo'lmasa)
+                if(!forceJump) {
+                    const nr = r + dr, nc = c + dc;
+                    if(nr>=0 && nr<8 && nc>=0 && nc<8 && !pieces[`${nr}-${nc}`]) {
+                        if(piece.type === 'damka' || (piece.color === 'red' && dr < 0) || (piece.color === 'white' && dr > 0)) {
+                            moves.push({ r: nr, c: nc, cap: null });
+                        }
+                    }
+                }
+            });
+            return moves;
+        }
+
+        function getAllJumpMoves(color) {
+            const jumpMoves = [];
+            Object.keys(gameState.pieces).forEach(pos => {
+                const p = gameState.pieces[pos];
+                if(p.color === color) {
+                    const [r, c] = pos.split('-').map(Number);
+                    const moves = getPieceMoves(r, c, false);
+                    moves.forEach(m => { if(m.cap) jumpMoves.push({ from: pos, to: m }); });
+                }
+            });
+            return jumpMoves;
+        }
+
+        function handleClick(r, c) {
+            if(gameState.status !== 'playing') return;
+            const pos = `${r}-${c}`;
+            const piece = gameState.pieces[pos];
+
+            if (piece && piece.color === gameState.turn) {
+                // Agar ketma-ket urish bo'lsa, boshqa toshni tanlatmaymiz
+                if(gameState.jumpOnly && gameState.jumpOnly !== pos) return;
+
+                const jumps = getAllJumpMoves(gameState.turn);
+                const pieceMoves = getPieceMoves(r, c, jumps.length > 0);
+                
+                if(jumps.length > 0 && pieceMoves.filter(m => m.cap).length === 0) {
+                    alert("Urib olish majburiy!");
+                    return;
+                }
+
+                selectedCell = pos;
+                possibleMoves = pieceMoves;
+                renderBoard();
+            } else if (selectedCell && !piece) {
+                const move = possibleMoves.find(m => m.r === r && m.c === c);
+                if (move) executeMove(selectedCell, move);
+            }
+        }
+
+        function executeMove(from, move) {
+            let newPieces = {...gameState.pieces};
+            let pData = {...newPieces[from]};
+            
+            if((pData.color === 'red' && move.r === 0) || (pData.color === 'white' && move.r === 7)) pData.type = 'damka';
+            
+            newPieces[`${move.r}-${move.c}`] = pData;
+            delete newPieces[from];
+            if(move.cap) delete newPieces[move.cap];
+
+            let nextJumpOnly = null;
+            let nextTurn = gameState.turn === 'red' ? 'white' : 'red';
+
+            // Ketma-ket urishni tekshirish
+            if(move.cap) {
+                const extraJumps = getPieceMoves(move.r, move.c, true, newPieces).filter(m => m.cap);
+                if(extraJumps.length > 0) {
+                    nextJumpOnly = `${move.r}-${move.c}`;
+                    nextTurn = gameState.turn;
+                }
+            }
+
+            db.ref('games/' + gameId).update({
+                pieces: newPieces,
+                turn: nextTurn,
+                jumpOnly: nextJumpOnly,
+                redTime: 30,
+                whiteTime: 30
+            });
+            selectedCell = null;
+            possibleMoves = [];
         }
 
         function renderBoard() {
@@ -99,12 +198,11 @@
                     const pos = `${r}-${c}`;
                     cell.className = `cell ${(r+c)%2 === 0 ? 'white-cell' : 'black-cell'}`;
                     if (possibleMoves.some(m => m.r === r && m.c === c)) cell.classList.add('possible-move');
-                    
                     const p = gameState.pieces[pos];
                     if (p) {
                         const pDiv = document.createElement('div');
                         pDiv.className = `piece ${p.color}-p ${p.type === 'damka' ? 'damka' : ''}`;
-                        if (selectedCell === pos) pDiv.classList.add('selected');
+                        if (selectedCell === pos || gameState.jumpOnly === pos) pDiv.classList.add('selected');
                         cell.appendChild(pDiv);
                     }
                     cell.onclick = () => handleClick(r, c);
@@ -113,88 +211,22 @@
             }
         }
 
-        function handleClick(r, c) {
-            const pos = `${r}-${c}`;
-            const piece = gameState.pieces[pos];
-
-            if (piece && piece.color === gameState.turn) {
-                selectedCell = pos;
-                // Urib olish va oddiy yurishlarni hisoblash
-                possibleMoves = getValidMoves(r, c);
-                renderBoard();
-            } else if (selectedCell && !piece) {
-                const move = possibleMoves.find(m => m.r === r && m.c === c);
-                if (move) executeMove(selectedCell, move);
-            }
-        }
-
-        function getValidMoves(r, c) {
-            const moves = [];
-            const p = gameState.pieces[`${r}-${c}`];
-            const dirs = [[1,1], [1,-1], [-1,1], [-1,-1]];
-            
-            dirs.forEach(([dr, dc]) => {
-                // Oddiy yurish
-                const nr = r + dr, nc = c + dc;
-                if(nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
-                    if(p.type === 'damka' || (p.color === 'red' && dr < 0) || (p.color === 'white' && dr > 0)) {
-                        moves.push({ r: nr, c: nc, cap: null });
-                    }
-                }
-                // Urib olish (Eng muhim joyi!)
-                const jr = r + dr*2, jc = c + dc*2;
-                if(jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`${jr}-${jc}`]) {
-                    const mid = gameState.pieces[`${r+dr}-${c+dc}`];
-                    if(mid && mid.color !== p.color) moves.push({ r: jr, c: jc, cap: `${r+dr}-${c+dc}` });
-                }
-            });
-            return moves;
-        }
-
-        function executeMove(from, move) {
-            let newPieces = {...gameState.pieces};
-            let pData = {...newPieces[from]};
-            
-            // Damka qilish
-            if((pData.color === 'red' && move.r === 0) || (pData.color === 'white' && move.r === 7)) pData.type = 'damka';
-            
-            newPieces[`${move.r}-${move.c}`] = pData;
-            delete newPieces[from];
-            
-            // TOSHNI YO'QOTISH (CAP)
-            if (move.cap) {
-                delete newPieces[move.cap];
-            }
-
-            const nextTurn = gameState.turn === 'red' ? 'white' : 'red';
-            const nextTime = myRating >= 1200 ? gameState[nextTurn + 'Time'] : 30;
-
-            db.ref('games/' + gameId).update({
-                pieces: newPieces,
-                turn: nextTurn,
-                redTime: gameState.turn === 'red' ? (myRating >= 1200 ? gameState.redTime : 30) : 30,
-                whiteTime: gameState.turn === 'white' ? (myRating >= 1200 ? gameState.whiteTime : 30) : 30
-            });
-            selectedCell = null;
-            possibleMoves = [];
-        }
-
         function updateUI() {
-            document.getElementById('timer-red').innerText = formatTime(gameState.redTime);
-            document.getElementById('timer-white').innerText = formatTime(gameState.whiteTime);
+            document.getElementById('timer-red').innerText = `00:${gameState.redTime.toString().padStart(2,'0')}`;
+            document.getElementById('timer-white').innerText = `00:${gameState.whiteTime.toString().padStart(2,'0')}`;
             document.getElementById('card-red').classList.toggle('active', gameState.turn === 'red');
             document.getElementById('card-white').classList.toggle('active', gameState.turn === 'white');
             if(tg.initDataUnsafe.user) document.getElementById('name-red').innerText = tg.initDataUnsafe.user.first_name;
         }
 
-        function formatTime(s) {
-            return `00:${s.toString().padStart(2, '0')}`;
-        }
-
         setInterval(() => {
             if(gameState.status === 'playing') {
-                let t = gameState.turn === 'red' ? 'redTime' : 'whiteTime';
-                if(gameState[t] > 0) db.ref('games/' + gameId + '/' + t).set(gameState[t] - 1);
+                let turn = gameState.turn === 'red' ? 'redTime' : 'whiteTime';
+                if(gameState[turn] > 0) {
+                    db.ref('games/' + gameId + '/' + turn).set(gameState[turn] - 1);
+                } else {
+                    db.ref('games/' + gameId).update({ status: 'finished' });
+                }
             }
         }, 1000);
     </script>
