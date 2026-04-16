@@ -3,35 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Shashka AI</title>
+    <title>Pro Shashka Online v6</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { display: flex; flex-direction: column; align-items: center; background: #121212; color: white; font-family: sans-serif; margin: 0; padding: 10px; }
-        #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 6px solid #3e2723; background: #3e2723; }
+        body { display: flex; flex-direction: column; align-items: center; background: #121212; color: white; font-family: sans-serif; margin: 0; padding: 10px; overflow: hidden; }
+        #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 6px solid #3e2723; background: #3e2723; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         .cell { aspect-ratio: 1/1; display: flex; justify-content: center; align-items: center; position: relative; }
         .white-cell { background: #d7ccc8; }
         .black-cell { background: #4e342e; }
-        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; border: 2px solid rgba(0,0,0,0.4); z-index: 2; }
+        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; border: 2px solid rgba(0,0,0,0.4); z-index: 2; transition: all 0.2s; }
         .red-p { background: #d32f2f; box-shadow: 0 4px #b71c1c; }
         .white-p { background: #fbc02d; box-shadow: 0 4px #f9a825; }
-        .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; }
-        .selected { outline: 4px solid #4caf50; box-shadow: 0 0 15px #4caf50; }
-        .possible-move::after { content: ''; width: 15px; height: 15px; background: rgba(76, 175, 80, 0.7); border-radius: 50%; position: absolute; z-index: 1; }
-        #status { margin: 15px; font-size: 1.1rem; background: #333; padding: 12px 25px; border-radius: 25px; border: 1px solid #4caf50; text-align: center; }
-        button { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
+        .damka::after { content: '👑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; }
+        .selected { outline: 4px solid #4caf50; box-shadow: 0 0 15px #4caf50; transform: scale(1.05); }
+        .possible-move::after { content: ''; width: 14px; height: 14px; background: rgba(76, 175, 80, 0.8); border-radius: 50%; position: absolute; z-index: 1; }
+        #status { margin: 10px; font-size: 1rem; background: #333; padding: 10px 20px; border-radius: 20px; border: 1px solid #4caf50; min-width: 200px; text-align: center; }
+        .controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; }
+        button { background: #4caf50; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .exit-btn { background: #f44336; }
+        button:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
-    <h3>Pro Shashka AI v1</h3>
-    <div id="status">Rejimni tanlang</div>
-    <div style="display: flex; gap: 10px;">
+    <div class="controls">
         <button onclick="setMode('pvp')">Do'st bilan</button>
         <button onclick="setMode('pve')">Bot bilan</button>
+        <button class="exit-btn" onclick="closeGame()">Chiqish</button>
     </div>
+    <div id="status">Yuklanmoqda...</div>
     <div id="board"></div>
 
     <script>
+        // Telegram sozlamalari
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Oynani to'liq yoyish
+
+        function closeGame() { tg.close(); }
+
         const firebaseConfig = {
             apiKey: "AIzaSyBbpI3DjECRf1NClu_RCw5bMnjBkFP24Jo",
             authDomain: "shashkionline-f0674.firebaseapp.com",
@@ -45,7 +55,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game') || 'ai_room_99';
+        const gameId = urlParams.get('game') || 'global_room';
 
         let gameState = { turn: 'red', pieces: {}, jumpOnly: null, mode: 'pvp' };
         let selectedCell = null;
@@ -56,7 +66,7 @@
                 gameState = snap.val(); 
                 renderBoard();
                 if (gameState.mode === 'pve' && gameState.turn === 'white') {
-                    setTimeout(botMove, 800);
+                    setTimeout(botMove, 700);
                 }
             } else { resetGame(); }
         });
@@ -141,7 +151,6 @@
         }
 
         function executeMove(from, to) {
-            const [sr, sc] = from.split('-').map(Number);
             let newPieces = {...gameState.pieces};
             let pData = {...newPieces[from]};
             if ((pData.color === 'red' && to.r === 0) || (pData.color === 'white' && to.r === 7)) pData.type = 'damka';
@@ -167,7 +176,8 @@
         function renderBoard() {
             const boardDiv = document.getElementById('board');
             boardDiv.innerHTML = '';
-            document.getElementById('status').innerText = gameState.turn === 'red' ? "Navbat: Siz (Qizil)" : "Navbat: Bot (Oq)";
+            let statusEl = document.getElementById('status');
+            statusEl.innerText = gameState.turn === 'red' ? "Navbat: Siz (Qizil)" : "Navbat: " + (gameState.mode === 'pve' ? "Bot (Oq)" : "Raqib (Oq)");
 
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
@@ -180,7 +190,7 @@
                     if (p) {
                         const pDiv = document.createElement('div');
                         pDiv.className = `piece ${p.color}-p ${p.type === 'damka' ? 'damka' : ''}`;
-                        if (selectedCell === pos) pDiv.classList.add('selected');
+                        if (selectedCell === pos || gameState.jumpOnly === pos) pDiv.classList.add('selected');
                         cell.appendChild(pDiv);
                     }
                     cell.onclick = () => {
@@ -203,7 +213,14 @@
                     gameState.pieces[p].color === gameState.turn && getMoves(...p.split('-').map(Number), false).some(m => m.cap)
                 );
                 let moves = getMoves(r, c, !!gameState.jumpOnly);
-                possibleMoves = canAnyJump ? moves.filter(m => m.cap) : moves;
+                if (canAnyJump) {
+                    possibleMoves = moves.filter(m => m.cap);
+                    if (possibleMoves.length === 0 && !gameState.jumpOnly) {
+                        alert("Urib olish majburiy!");
+                    }
+                } else {
+                    possibleMoves = moves;
+                }
                 renderBoard();
             } else if (selectedCell && !piece) {
                 const move = possibleMoves.find(m => m.r === r && m.c === c);
