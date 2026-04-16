@@ -3,62 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Shashka - Timer & Profile</title>
+    <title>Pro Shashka v8</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { display: flex; flex-direction: column; align-items: center; background: #121212; color: white; font-family: sans-serif; margin: 0; padding: 10px; overflow-x: hidden; }
-        .profiles { display: flex; justify-content: space-between; width: 95vw; max-width: 400px; margin-bottom: 15px; gap: 10px; }
-        .p-card { background: #1e1e1e; padding: 10px; border-radius: 12px; border: 1px solid #4caf50; flex: 1; text-align: center; position: relative; }
-        .p-card.active { box-shadow: 0 0 15px #4caf50; border-width: 2px; }
-        .p-name { font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #4caf50; white-space: nowrap; overflow: hidden; }
-        .p-timer { font-family: monospace; font-size: 18px; color: #ffeb3b; }
-        .p-ball { font-size: 11px; color: #aaa; }
-        
-        #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 5px solid #3e2723; background: #3e2723; }
+        body { display: flex; flex-direction: column; align-items: center; background: #121212; color: white; font-family: sans-serif; margin: 0; padding: 10px; }
+        .profiles { display: flex; justify-content: space-between; width: 95vw; max-width: 400px; margin-bottom: 10px; }
+        .p-card { background: #1e1e1e; padding: 8px; border-radius: 10px; border: 1px solid #4caf50; flex: 1; text-align: center; }
+        .p-card.active { border: 2px solid #ffeb3b; box-shadow: 0 0 10px #ffeb3b; }
+        .p-name { font-size: 12px; font-weight: bold; color: #4caf50; }
+        .p-timer { font-size: 18px; font-family: monospace; color: #ffeb3b; }
+        #board { display: grid; grid-template-columns: repeat(8, 12.5%); width: 95vw; max-width: 400px; height: 95vw; max-height: 400px; border: 5px solid #3e2723; }
         .cell { aspect-ratio: 1/1; display: flex; justify-content: center; align-items: center; position: relative; }
         .white-cell { background: #d7ccc8; }
         .black-cell { background: #4e342e; }
-        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0,0,0,0.3); z-index: 2; }
+        .piece { width: 85%; height: 85%; border-radius: 50%; cursor: pointer; position: relative; z-index: 2; }
         .red-p { background: #d32f2f; box-shadow: 0 4px #b71c1c; }
         .white-p { background: #fbc02d; box-shadow: 0 4px #f9a825; }
-        .damka::after { content: '👑'; font-size: 20px; }
-        .selected { outline: 3px solid #4caf50; }
-        .possible-move::after { content: ''; width: 14px; height: 14px; background: rgba(76, 175, 80, 0.7); border-radius: 50%; position: absolute; }
-        
-        .controls { display: flex; gap: 8px; margin-bottom: 12px; }
-        button { background: #4caf50; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; }
-        .exit-btn { background: #f44336; }
+        .damka::after { content: '👑'; font-size: 20px; position: absolute; top: 15%; }
+        .selected { outline: 3px solid #4caf50; transform: scale(1.05); }
+        .possible-move::after { content: ''; width: 12px; height: 12px; background: rgba(76, 175, 80, 0.7); border-radius: 50%; position: absolute; }
+        .controls { display: flex; gap: 5px; margin-bottom: 10px; }
+        button { background: #4caf50; color: white; border: none; padding: 8px; border-radius: 5px; font-size: 11px; }
     </style>
 </head>
 <body>
     <div class="profiles">
         <div id="card-red" class="p-card">
             <div id="name-red" class="p-name">Siz</div>
-            <div id="timer-red" class="p-timer">00:00</div>
-            <div id="ball-red" class="p-ball">Ball: 1000</div>
+            <div id="timer-red" class="p-timer">00:30</div>
         </div>
         <div id="card-white" class="p-card">
             <div id="name-white" class="p-name">Raqib</div>
-            <div id="timer-white" class="p-timer">00:00</div>
-            <div id="ball-white" class="p-ball">Ball: 1000</div>
+            <div id="timer-white" class="p-timer">00:30</div>
         </div>
     </div>
-
     <div class="controls">
-        <button onclick="setMode('pvp')">Do'st</button>
-        <button onclick="setMode('pve')">Bot</button>
-        <button class="exit-btn" onclick="tg.close()">❌</button>
+        <button onclick="setMode('pve')">🤖 Bot</button>
+        <button onclick="tg.close()" style="background:#f44336">❌ Chiqish</button>
     </div>
-
     <div id="board"></div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-
-        // Firebase sozlamalari (Sizniki)
+        
         const firebaseConfig = {
             apiKey: "AIzaSyBbpI3DjECRf1NClu_RCw5bMnjBkFP24Jo",
             authDomain: "shashkionline-f0674.firebaseapp.com",
@@ -70,88 +60,34 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game') || 'room1';
-        
-        // Foydalanuvchi balli (Botdan keladi, hozircha 1000 deb olamiz)
-        let myBall = 1000; 
-        let gameState = { turn: 'red', pieces: {}, mode: 'pvp', status: 'playing', redTime: 30, whiteTime: 30 };
-        let timerInterval = null;
+        const gameId = urlParams.get('game') || 'room_' + tg.initDataUnsafe.user?.id;
+        const myRating = 1100; // Bu yerda botdan kelgan reyting bo'lishi kerak
 
-        const user = tg.initDataUnsafe.user;
-        if(user) {
-            document.getElementById('name-red').innerText = user.first_name;
-            db.ref('games/' + gameId + '/players/red').update({ name: user.first_name, ball: myBall });
-        }
+        let gameState = { turn: 'red', pieces: {}, redTime: 30, whiteTime: 30, status: 'playing' };
+        let selectedCell = null;
+        let possibleMoves = [];
 
         db.ref('games/' + gameId).on('value', (snap) => {
             if (snap.exists()) {
                 gameState = snap.val();
-                updateUI();
                 renderBoard();
-                startLocalTimer();
+                updateUI();
             } else { resetGame(); }
         });
 
         function resetGame() {
             const pieces = {};
-            for(let r=0; r<8; r++) {
-                for(let c=0; c<8; c++) {
-                    if((r+c)%2 !== 0) {
+            for(let r=0; r<8; r++){
+                for(let c=0; c<8; c++){
+                    if((r+c)%2 !== 0){
                         if(r < 3) pieces[`${r}-${c}`] = { color: 'white', type: 'normal' };
                         if(r > 4) pieces[`${r}-${c}`] = { color: 'red', type: 'normal' };
                     }
                 }
             }
-            // Ballga qarab vaqt belgilash
-            let initialTime = myBall >= 1200 ? 180 : 30; 
-            db.ref('games/' + gameId).set({
-                turn: 'red', pieces, mode: 'pvp', status: 'playing',
-                redTime: initialTime, whiteTime: initialTime, lastUpdate: Date.now()
-            });
-        }
-
-        function startLocalTimer() {
-            clearInterval(timerInterval);
-            if (gameState.status !== 'playing') return;
-
-            timerInterval = setInterval(() => {
-                let currentTurn = gameState.turn;
-                if (myBall < 1200) {
-                    // Har bir yurish uchun 30 soniya (yurish almashganda vaqt qayta boshlanadi)
-                    gameState[currentTurn + 'Time']--;
-                } else {
-                    // Umumiy 3 daqiqa
-                    gameState[currentTurn + 'Time']--;
-                }
-
-                if (gameState[currentTurn + 'Time'] <= 0) {
-                    clearInterval(timerInterval);
-                    alert("Vaqt tugadi! Mag'lubiyat.");
-                    db.ref('games/' + gameId).update({ status: 'timeout' });
-                }
-                updateUI();
-            }, 1000);
-        }
-
-        function updateUI() {
-            document.getElementById('timer-red').innerText = formatTime(gameState.redTime);
-            document.getElementById('timer-white').innerText = formatTime(gameState.whiteTime);
-            
-            document.getElementById('card-red').className = `p-card ${gameState.turn === 'red' ? 'active' : ''}`;
-            document.getElementById('card-white').className = `p-card ${gameState.turn === 'white' ? 'active' : ''}`;
-            
-            if(gameState.players) {
-                if(gameState.players.red) document.getElementById('name-red').innerText = gameState.players.red.name;
-                if(gameState.players.white) document.getElementById('name-white').innerText = gameState.players.white.name;
-            }
-        }
-
-        function formatTime(sec) {
-            let m = Math.floor(sec / 60);
-            let s = sec % 60;
-            return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            const startTime = myRating >= 1200 ? 180 : 30;
+            db.ref('games/' + gameId).set({ turn: 'red', pieces, redTime: startTime, whiteTime: startTime, status: 'playing' });
         }
 
         function renderBoard() {
@@ -162,47 +98,105 @@
                     const cell = document.createElement('div');
                     const pos = `${r}-${c}`;
                     cell.className = `cell ${(r+c)%2 === 0 ? 'white-cell' : 'black-cell'}`;
+                    if (possibleMoves.some(m => m.r === r && m.c === c)) cell.classList.add('possible-move');
+                    
                     const p = gameState.pieces[pos];
                     if (p) {
                         const pDiv = document.createElement('div');
                         pDiv.className = `piece ${p.color}-p ${p.type === 'damka' ? 'damka' : ''}`;
+                        if (selectedCell === pos) pDiv.classList.add('selected');
                         cell.appendChild(pDiv);
                     }
-                    cell.onclick = () => handleMove(r, c);
+                    cell.onclick = () => handleClick(r, c);
                     boardDiv.appendChild(cell);
                 }
             }
         }
 
-        let selected = null;
-        function handleMove(r, c) {
-            if(gameState.status !== 'playing') return;
+        function handleClick(r, c) {
             const pos = `${r}-${c}`;
-            const p = gameState.pieces[pos];
-            if(p && p.color === gameState.turn) {
-                selected = pos;
+            const piece = gameState.pieces[pos];
+
+            if (piece && piece.color === gameState.turn) {
+                selectedCell = pos;
+                // Urib olish va oddiy yurishlarni hisoblash
+                possibleMoves = getValidMoves(r, c);
                 renderBoard();
-                document.querySelector(`[onclick="handleMove(${r}, ${c})"]`).firstChild.classList.add('selected');
-            } else if(selected && !p) {
-                // Yurish mantiqi (soddalashtirilgan)
-                let newPieces = {...gameState.pieces};
-                newPieces[pos] = newPieces[selected];
-                delete newPieces[selected];
-                
-                // Navbat almashganda vaqtni ballga qarab yangilash
-                let nextTime = myBall >= 1200 ? gameState[gameState.turn === 'red' ? 'whiteTime' : 'redTime'] : 30;
-                
-                db.ref('games/' + gameId).update({
-                    pieces: newPieces,
-                    turn: gameState.turn === 'red' ? 'white' : 'red',
-                    redTime: gameState.turn === 'red' ? (myBall >= 1200 ? gameState.redTime : 30) : gameState.redTime,
-                    whiteTime: gameState.turn === 'white' ? (myBall >= 1200 ? gameState.whiteTime : 30) : gameState.whiteTime
-                });
-                selected = null;
+            } else if (selectedCell && !piece) {
+                const move = possibleMoves.find(m => m.r === r && m.c === c);
+                if (move) executeMove(selectedCell, move);
             }
         }
 
-        function setMode(m) { db.ref('games/' + gameId).update({ mode: m }); }
+        function getValidMoves(r, c) {
+            const moves = [];
+            const p = gameState.pieces[`${r}-${c}`];
+            const dirs = [[1,1], [1,-1], [-1,1], [-1,-1]];
+            
+            dirs.forEach(([dr, dc]) => {
+                // Oddiy yurish
+                const nr = r + dr, nc = c + dc;
+                if(nr>=0 && nr<8 && nc>=0 && nc<8 && !gameState.pieces[`${nr}-${nc}`]) {
+                    if(p.type === 'damka' || (p.color === 'red' && dr < 0) || (p.color === 'white' && dr > 0)) {
+                        moves.push({ r: nr, c: nc, cap: null });
+                    }
+                }
+                // Urib olish (Eng muhim joyi!)
+                const jr = r + dr*2, jc = c + dc*2;
+                if(jr>=0 && jr<8 && jc>=0 && jc<8 && !gameState.pieces[`${jr}-${jc}`]) {
+                    const mid = gameState.pieces[`${r+dr}-${c+dc}`];
+                    if(mid && mid.color !== p.color) moves.push({ r: jr, c: jc, cap: `${r+dr}-${c+dc}` });
+                }
+            });
+            return moves;
+        }
+
+        function executeMove(from, move) {
+            let newPieces = {...gameState.pieces};
+            let pData = {...newPieces[from]};
+            
+            // Damka qilish
+            if((pData.color === 'red' && move.r === 0) || (pData.color === 'white' && move.r === 7)) pData.type = 'damka';
+            
+            newPieces[`${move.r}-${move.c}`] = pData;
+            delete newPieces[from];
+            
+            // TOSHNI YO'QOTISH (CAP)
+            if (move.cap) {
+                delete newPieces[move.cap];
+            }
+
+            const nextTurn = gameState.turn === 'red' ? 'white' : 'red';
+            const nextTime = myRating >= 1200 ? gameState[nextTurn + 'Time'] : 30;
+
+            db.ref('games/' + gameId).update({
+                pieces: newPieces,
+                turn: nextTurn,
+                redTime: gameState.turn === 'red' ? (myRating >= 1200 ? gameState.redTime : 30) : 30,
+                whiteTime: gameState.turn === 'white' ? (myRating >= 1200 ? gameState.whiteTime : 30) : 30
+            });
+            selectedCell = null;
+            possibleMoves = [];
+        }
+
+        function updateUI() {
+            document.getElementById('timer-red').innerText = formatTime(gameState.redTime);
+            document.getElementById('timer-white').innerText = formatTime(gameState.whiteTime);
+            document.getElementById('card-red').classList.toggle('active', gameState.turn === 'red');
+            document.getElementById('card-white').classList.toggle('active', gameState.turn === 'white');
+            if(tg.initDataUnsafe.user) document.getElementById('name-red').innerText = tg.initDataUnsafe.user.first_name;
+        }
+
+        function formatTime(s) {
+            return `00:${s.toString().padStart(2, '0')}`;
+        }
+
+        setInterval(() => {
+            if(gameState.status === 'playing') {
+                let t = gameState.turn === 'red' ? 'redTime' : 'whiteTime';
+                if(gameState[t] > 0) db.ref('games/' + gameId + '/' + t).set(gameState[t] - 1);
+            }
+        }, 1000);
     </script>
 </body>
 </html>
